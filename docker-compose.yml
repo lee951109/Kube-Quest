@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  # 서비스 이름
+  postgres-db:
+    image: postgres:15-alpine
+    ports:
+      - '5432:5432'
+    # DB 접속 초기 설정
+    environment:
+      POSTGRES_USER: quest_admin
+      POSTGRES_PASSWORD: quest_password
+      POSTGRES_DB: kube_quest_db 
+    # 컨테이너가 꺼져도 데이터가 날아가지 않도록 로컬 디스크와 마운트
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+# 볼륨 선언
+volumes:
+  postgres-data:
