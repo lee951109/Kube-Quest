@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserModule } from './user/user.module';
 import { User } from './user/entities/user.entity';
+import { GameModule } from './game/game.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { User } from './user/entities/user.entity';
       synchronize: true, // Entity 변경 시 DB 스키마를 자동 업데이트 (개발 환경에서만 true!)
     }),
     UserModule,
+    GameModule,
   ],
 })
 export class AppModule {}

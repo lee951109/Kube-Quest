@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Kube-Quest Socket Test</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Kube-Quest 웹소켓 테스트 클라이언트</h1>
+    <button onclick="sendMoveEvent()" style="padding: 10px; font-size: 16px;">
+        이동 데이터 보내기 ('move' 이벤트 쏘기)
+    </button>
+
+    <script>
+        // 1. NestJS 서버(3000 포트)로 웹소켓 연결 시도
+        // C# SignalR 클라이언트의 HubConnectionBuilder 와 같은 역할입니다.
+        const socket = io('http://localhost:3000');
+
+        // 2. 서버와 연결이 성공했을 때 실행되는 이벤트
+        socket.on('connect', () => {
+            console.log('✅ 서버에 연결되었습니다! 내 소켓 ID:', socket.id);
+        });
+
+        // 3. 서버가 'playerMoved'라는 이름으로 데이터를 브로드캐스팅하면 여기서 받습니다.
+        socket.on('playerMoved', (data) => {
+            console.log('🔄 서버로부터 받은 브로드캐스트 정보:', data);
+        });
+
+        // 4. 버튼을 누르면 실행되는 함수
+        function sendMoveEvent() {
+            // 게임 내 캐릭터의 좌표(임시 데이터)
+            const positionData = { x: 10, y: 20, z: 0 };
+            
+            // emit('이벤트명', 데이터) 함수를 통해 서버로 데이터를 날립니다.
+            // 서버의 @SubscribeMessage('move')가 이 데이터를 낚아챕니다.
+            socket.emit('move', positionData);
+            console.log('🚀 서버로 move 이벤트 전송 완료!');
+        }
+    </script>
+</body>
+</html>

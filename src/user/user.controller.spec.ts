@@ -1,18 +1,20 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { UserController } from './user.controller';
+import { Body, Controller, Get, Post } from '@nestjs/common';
+import { UserService } from './user.service';
+import { CreateUserDto } from './dto/create-user.dto';
 
-describe('UserController', () => {
-  let controller: UserController;
+@Controller('user')
+export class UserController {
+  constructor(private readonly userService: UserService) {}
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [UserController],
-    }).compile();
+  @Get()
+  async getAllUsers() {
+    // 비동기로 서비스 결과를 기다린 후 응답
+    return await this.userService.findAll();
+  }
 
-    controller = module.get<UserController>(UserController);
-  });
+  @Post()
+  async createUser(@Body() createUserDto: CreateUserDto){
+    return await this.userService.create(createUserDto);
+  }
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-});
+}
