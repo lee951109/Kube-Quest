@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s # 5초마다 한 번씩 서버 상태를 조회(게임 특성상 짧게 설정).
+
+scrape_configs:
+  - job_name: 'kube-quest-nestjs'
+    metrics_path: '/metrics'
+    static_configs:
+      # Docker 컨테이너 내부에서 내 PC(호스트)의 3000번 포트로 접속하기 위한 주소
+      - targets: ['host.docker.internal:3000']
