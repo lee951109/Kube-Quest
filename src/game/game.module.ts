@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { GameGateway } from './game.gateway';
 import { makeGaugeProvider } from '@willsoto/nestjs-prometheus';
+import { RedisModule } from 'src/redis/redis.module';
 
 @Module({
+  imports: [RedisModule],
   providers: [
     GameGateway,
     makeGaugeProvider({

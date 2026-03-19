@@ -5,6 +5,7 @@ import { UserModule } from './user/user.module';
 import { User } from './user/entities/user.entity';
 import { GameModule } from './game/game.module';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
     }),
     UserModule,
     GameModule,
+    RedisModule,
   ],
 })
 export class AppModule {}
