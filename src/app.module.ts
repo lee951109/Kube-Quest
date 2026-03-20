@@ -16,7 +16,7 @@ import { RedisModule } from './redis/redis.module';
     }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: 'localhost', // Docker Compose로 로컬에 띄웠으므로 localhost
+      host: 'postgres-db', // docker-compose의 서비스 이름
       port: 5432,
       username: 'quest_admin',     // docker-compose.yml에 적은 계정 정보
       password: 'quest_password',

@@ -8,7 +8,7 @@ export class RedisIoAdapter extends IoAdapter {
 
     // Redis 서버와 연결하는 초기화 작업
     async connectToRedis(): Promise<void> {
-        const pubClinet = createClient({url: `redis://localhost:6379`});
+        const pubClinet = createClient({url: `redis://redis-cache:6379`});
         const subClient = pubClinet.duplicate();
 
         await Promise.all([pubClinet.connect(), subClient.connect()]);

@@ -34,6 +34,14 @@ services:
     depends_on:
       - prometheus
 
+  kube-quest-backend:
+    build: .
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres-db
+      - redis-cache
+
 # 볼륨 선언
 volumes:
   postgres-data:

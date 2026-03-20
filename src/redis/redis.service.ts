@@ -7,7 +7,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     constructor() {
         // Redis 클라이언트 초기화 (기본 포트 6379)
-        this.client = createClient({url: 'redis://localhost:6379'});
+        this.client = createClient({url: 'redis://redis-cache:6379'});
     }
 
     // 모듈이 초기화될 때 Redis와 연결.
