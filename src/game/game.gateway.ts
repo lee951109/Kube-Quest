@@ -5,6 +5,7 @@ import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Gauge } from 'prom-client';
 import { Server, Socket } from 'socket.io';
 import { RedisService } from 'src/redis/redis.service';
+import { v4 as uuidv4 } from 'uuid';
 
 
 @WebSocketGateway({cors: true})
@@ -22,6 +23,29 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly redisService: RedisService,
   ) {}
 
+  // 서버가 켜질 때, 5초마다 랜덤 위치에 코인을 생성
+  afterInit() {
+    setInterval(async() => {
+      // 현재 코인 개수를 확인
+      const currentCoinCount = await this.redisService.getItemCount();
+      
+      // 필드에 코인이 너무 많으면(예: 30개 이상) 생성을 건너뜀
+      if (currentCoinCount >= 30) {
+        // console.log('필드에 코인이 너무 많습니다. 생성을 건너뜁니다.');
+        return;
+      }
+
+      const itemId = `coin_${uuidv4()}`;
+      // 600x400 랜덤 좌표
+      const position = { x: Math.floor(Math.random() * 580) + 10, y: Math.floor(Math.random() * 380) + 10};
+      
+      await this.redisService.setItem(itemId, position);
+
+      // 생성된 코인 정보를 모든 클라이언트에게 전파
+      this.server.emit('itemSpawned', { itemId, position });
+    }, 20000);
+  }
+
   // 유저가 게임(소켓)에 접속했을 때 자동으로 실행되는 이벤트
   async handleConnection(client: Socket): Promise<void> {
     console.log(`유저 접속됨: ${client.id}`);
@@ -31,7 +55,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     
     // 새로 접속한 유저에게 기존에 있던 모든 유저의 위치를 공유
     const allPositions = await this.redisService.getAllPlayerPositions();
+    const allItems = await this.redisService.getAllItems();
     client.emit('initPositions', allPositions);
+    client.emit('initItems', allItems);
   }
 
   // 유저가 게임을 종료하거나 연결이 끊겼을 때 실행.
@@ -52,9 +78,18 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // 이동할 때마다 Redis 메모리에 0.001초 만에 좌표를 덮어씁니다.
     await this.redisService.setPlayerPosition(client.id, data)
 
-    this.server.emit('playerMoved', {
-      clientId: client.id,
-      position: data,
-    });
+    this.server.emit('playerMoved', { clientId: client.id, position: data });
+  }
+
+  // 클라이언트가 코인을 획득했을 때 처리
+  @SubscribeMessage('collectItem')
+  async handleCollectItem(@MessageBody() data: {itemId: string}, @ConnectedSocket() client: Socket) {
+    // Redis에서 삭제 (누가 먼저 지웠으면 false가 반환)
+    const isCollected = await this.redisService.removeItem(data.itemId);
+
+    if (isCollected) {
+      this.server.emit('itemCollected', {itemId: data.itemId, clientId: client.id});
+      
+    }
   }
 }

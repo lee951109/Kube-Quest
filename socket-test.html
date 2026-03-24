@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Kube-Quest Redis 동기화 테스트</title>
+  <title>Kube-Quest 코인 획득 테스트</title>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; }
@@ -19,54 +19,86 @@
       position: absolute; 
       border-radius: 50%; 
       transform: translate(-50%, -50%); 
-      transition: left 0.1s, top 0.1s; /* 부드러운 이동 효과 */
+      transition: left 0.1s, top 0.1s; 
     }
-    .me { background: #e74c3c; z-index: 10; border: 2px solid #c0392b; } /* 내 캐릭터: 빨간색 */
-    .other { background: #3498db; border: 2px solid #2980b9; } /* 다른 유저: 파란색 */
+    .me { background: #e74c3c; z-index: 10; border: 2px solid #c0392b; } 
+    .other { background: #3498db; border: 2px solid #2980b9; } 
+    
+    /* 🎯 새로 추가된 코인 스타일 */
+    .coin {
+      width: 15px; height: 15px;
+      position: absolute;
+      background: #f1c40f; /* 금색 */
+      border-radius: 50%;
+      border: 2px solid #f39c12;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 5px rgba(241, 196, 15, 0.8);
+      z-index: 5;
+    }
   </style>
 </head>
 <body>
-  <h2>🎯 Kube-Quest In-Memory 동기화 보드</h2>
-  <p>보드 안쪽을 클릭해서 캐릭터를 이동시켜 보세요!</p>
+  <h2>🎯 Kube-Quest 코인 파밍 맵</h2>
+  <p>보드를 클릭해 이동하며 생성되는 노란색 코인을 획득해 보세요!</p>
   <div id="game-board"></div>
 
   <script>
     // 1. 소켓 서버 연결
     const socket = io('http://localhost:3000');
     const board = document.getElementById('game-board');
+
     const players = {}; // 화면에 그려진 다른 유저들 저장소
+    const items = {}; // 화면에 있는 코인 데이터 저장
 
     // 내 캐릭터 DOM 생성
     const myAvatar = document.createElement('div');
     myAvatar.className = 'player me';
-    // 초기에는 화면 밖이나 중앙에 숨겨둘 수 있지만 일단 좌상단에 위치
     board.appendChild(myAvatar);
 
-    // 🎯 [핵심 1] 내가 처음 접속했을 때: Redis가 기억하는 기존 유저들 좌표 로드
+     // 내가 처음 접속했을 때: Redis가 기억하는 기존 유저들 좌표 로드
     socket.on('initPositions', (positions) => {
-      console.log('Redis 캐시에서 불러온 초기 좌표:', positions);
-      for (const [id, pos] of Object.entries(positions)) {
-        if (id !== socket.id) { // 나는 제외하고 그림
-          updateOtherPlayer(id, pos);
-        }
+      for (const [id, pos] of Object.entries(positions)){
+        if (id !== socket.id) updateOtherPlayer(id, pos);
       }
     });
 
-    // 🎯 [핵심 2] 누군가 움직였을 때 (Redis에 업데이트 됨과 동시에 브로드캐스팅 됨)
+    // 누군가 움직였을 때 (Redis에 업데이트 됨과 동시에 브로드캐스팅 됨)
     socket.on('playerMoved', (data) => {
-      if (data.clientId !== socket.id) {
-        updateOtherPlayer(data.clientId, data.position);
-      }
+      if (data.clientId !== socket.id) updateOtherPlayer(data.clientId, data.position);
     });
 
-    // 🎯 [핵심 3] 누군가 나갔을 때 (Redis에서 삭제됨)
+    // 누군가 나갔을 때 (Redis에서 삭제됨)
     socket.on('playerDisconnected', (id) => {
       if (players[id]) {
-        players[id].remove(); // 화면에서 파란 점 삭제
+        players[id].remove();
         delete players[id];
       }
     });
 
+    // 1. 처음 접속 시 이미  깔려있는 코인들 그리기
+    socket.on('initItems', (serverItems) => {
+      for (const [id, pos] of Object.entries(serverItems)){
+        drawItem(id, pos);
+      }
+    });
+
+    // 2. 서버에서 새로운 코인이 생성되었을때 그리기 (5초마다)
+    socket.on('itemSpawned', (data) => {
+      drawItem(data.itemId, data.position);
+    });
+
+    // 3. 누군가 코인을 성공적으로 획득했을 때 화면에서 지우기
+    socket.on('itemCollected', (data) => {
+      if (items[data.itemId]) {
+        items[data.itemId].element.remove(); // DOM에서 삭제
+        delete items[data.itemId]; // 메모리에서 삭제
+
+        // 내가 먹었다면
+        if (data.clientId === socket.id) {
+          console.log(`코인 획득 성공! ID: ${data.itemId}`);
+        }
+      }
+    });
     // 화면 클릭 시 내 좌표를 서버로 전송
     board.addEventListener('click', (e) => {
       const rect = board.getBoundingClientRect();
@@ -79,6 +111,9 @@
 
       // 서버로 좌표 발송 -> 서버가 Redis에 HSET으로 덮어씀
       socket.emit('move', { x, y });
+
+      // 내 캐릭터가 이동한 후, 근처에 코인이 있는지 체크
+      checkItemCollision(x, y);
     });
 
     // 다른 유저(파란 점)를 화면에 그리거나 위치를 갱신하는 함수
@@ -91,6 +126,37 @@
       players[id].style.left = pos.x + 'px';
       players[id].style.top = pos.y + 'px';
     }
+
+    // 화면에 코인 그리기
+    function drawItem(id, pos) {
+      if (items[id]) return; // 이미 있다면 패스
+
+      const coinEl = document.createElement('div');
+      coinEl.className = 'coin';
+      coinEl.style.left = pos.x + 'px';
+      coinEl.style.top = pos.y + 'px';
+      board.appendChild(coinEl);
+
+      // 나중에 위치 비교를 위해 x, y 좌표도 함께 저장
+      items[id] = { element: coinEl, x: pos.x, y: pos.y };
+    }
+
+    // 내 캐릭터 좌표와 코인들 좌표 비교하여 거리 체크
+    function checkItemCollision(px, py) {
+      for (const[id, coin] of Object.entries(items)) {
+        // 피타고라스 정리로 두 점 사이의 거리 계산
+        const dx = px - coin.x;
+        const dy = py - coin.y;
+        const distance = Math.sqrt(dx * dx + dy *dy);
+
+        // 거리가 20px 이내로 가까워지면 획득한 것으로 간주
+        if (distance < 20) {
+          // 서버에 획득 요청을 보냄 (아직 화면에서 제거 x)
+          socket.emit('collectItem', { itemId: id });
+        }
+      }
+    }
+
   </script>
 </body>
 </html>

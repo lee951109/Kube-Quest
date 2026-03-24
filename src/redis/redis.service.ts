@@ -45,4 +45,36 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         await this.client.hDel('players:positions', clientId);
     }
 
+
+    // 1. 새로운 아이템을 Redis에 저장. (key: itemID, value: 좌표)
+    async setItem(itemId: string, position: {x: number, y: number}): Promise<void> {
+        await this.client.hSet('items:coins', itemId, JSON.stringify(position));
+    }
+
+    // 2. 현재 맵에 있는 모든 아이템을 가져온다.
+    async getAllItems(): Promise<Object> {
+        const data = await this.client.hGetAll('items:coins');
+        const items = {};
+        for (const  [key, value] of Object.entries(data)) {
+            items[key] = JSON.parse(value);
+        }
+
+        return items;
+    }
+
+    // 누군가 아이템을 먹었을 때 Redis에서 삭제
+    async removeItem(itemId: string): Promise<boolean> {
+        const result = await this.client.hDel('items:coins', itemId);
+        
+        // 삭제 성공 시 1, 이미 누가 먹어서 없으면 0
+        return result === 1; 
+    }
+
+    // 현재 Redis에 저장된 코인의 총 개수를 조회
+    async getItemCount():Promise<number> {
+        const data = await this.client.hGetAll('items:conis');
+        return Object.keys(data).length; // 해시 맵의 필드 개수 = 코인 개수
+    }
+
+
 }
