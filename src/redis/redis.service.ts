@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { createClient, RedisClientType } from 'redis';
+import { timestamp } from 'rxjs';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -43,6 +44,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     // 3. 접속을 종료한 유저의 데이터를 캐시에서 제거
     async removePlayer(clientId: string): Promise<void> {
         await this.client.hDel('players:positions', clientId);
+        // 유저 접속 종료 시 점수 데이터 삭제(캐시)
+        await this.client.hDel('players:scores', clientId);
     }
 
 
@@ -77,4 +80,46 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
 
-}
+    // 유저의 점수를 1점 올리고, 최종 점수를 반환 (HINCRBY 사용)
+    async incrementPlayerScore(clientId: string): Promise<number> {
+        // hIncrBy는 동시성 완벽 보장: 값이 없으면 0에서 시작해 1을 더함
+        return await this.client.hIncrBy('players:scores', clientId, 1);
+    }
+
+    // 현재 접속 중인 모든 유저의 점수를 조회
+    async getAllPlayerScores(): Promise<Record<string, number>> {
+        const data = await this.client.hGetAll('players:scores');
+        const scores: Record<string, number> = {};
+
+        for (const [key, value] of Object.entries(data)){
+            scores[key] = parseInt(value, 10); // 문자열을 숫자로 변경
+        }
+        
+        return scores;
+    }
+
+    // 채팅 메시지를 Redis 리스트에 저장하고, 최근 50개만 유지
+    async saveChatMessage(clientId: string, message: string): Promise<Object> {
+        const chatData = JSON.stringify({
+            clientId,
+            message,
+            timestamp: Date.now()
+        });
+
+        // chat:history 리스트의 맨 앞에 새로운 메시지를 밀어 넣는다.
+        await this.client.lPush('chat:history', chatData);
+        // 인덱스 0부터 49까지만 남기고 나머지는 메모리에서 삭제
+        await this.client.lTrim('chat:history', 0, 49);
+
+        return JSON.parse(chatData);
+    }
+
+    // 최근 50개의 채팅 내역 조회
+    async getRecentChats(): Promise<any[]> {
+        // 0~49까지의 데이터 조회
+        const chats = await this.client.lRange('chat:history', 0, 49);
+
+        // 저장될 때 최신이 0번이었으므로, 화면에 보여줄 때 역순으로 정렬
+        return chats.map(c => JSON.parse(c)).reverse();
+    }
+ }

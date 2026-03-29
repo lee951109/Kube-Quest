@@ -56,8 +56,15 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // 새로 접속한 유저에게 기존에 있던 모든 유저의 위치를 공유
     const allPositions = await this.redisService.getAllPlayerPositions();
     const allItems = await this.redisService.getAllItems();
+    // 접속 시 기존 유저들의 점수 조회
+    const allScores = await this.redisService.getAllPlayerScores();
+    // 접속 시 최근 채팅 내역 50개를 불러와서 전송
+    const recentChats = await this.redisService.getRecentChats();
+
     client.emit('initPositions', allPositions);
     client.emit('initItems', allItems);
+    client.emit('initScores', allScores);
+    client.emit('initChat', recentChats);
   }
 
   // 유저가 게임을 종료하거나 연결이 끊겼을 때 실행.
@@ -88,8 +95,27 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const isCollected = await this.redisService.removeItem(data.itemId);
 
     if (isCollected) {
-      this.server.emit('itemCollected', {itemId: data.itemId, clientId: client.id});
+      console.log(`[백엔드] 코인 획득 검증 완료. 점수를 올립니다.`);
       
+      // 1. Redis에서 점수 1 증가 (새로운 점수 반환)
+      const newScore = await this.redisService.incrementPlayerScore(client.id);
+
+      // 2. 코인이 사라졌음을 알림
+      this.server.emit('itemCollected', { itemId: data.itemId, clientId: client.id });
+      
+      // 3. 해당 유저의 점수가 올랐음을 모두에게 알림
+      this.server.emit('scoreUpdated', { clientId: client.id, score: newScore });
     }
+  }
+
+  @SubscribeMessage('sendMessage')
+  async handleSendMessage(@MessageBody() data: { message: string }, @ConnectedSocket() client: Socket) {
+    if (!data.message || data.message.trim() === '') return;
+
+    // 1. Redis에 메시지 저장 (최대 50개 유지)
+    const savedChat = await this.redisService.saveChatMessage(client.id, data.message);
+    
+    // 2. 모든 접속자에게 새로운 채팅 메시지를 브로드캐스팅
+    this.server.emit('chatMessage', savedChat);
   }
 }
