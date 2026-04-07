@@ -1,6 +1,7 @@
+import * as os from 'os';
 import { ConnectedSocket, MessageBody,
    OnGatewayConnection, OnGatewayDisconnect,
-    SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+    OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Gauge } from 'prom-client';
 import { Server, Socket } from 'socket.io';
@@ -9,12 +10,16 @@ import { v4 as uuidv4 } from 'uuid';
 
 
 @WebSocketGateway({cors: true})
-export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
 
   // 현재 연결된 웹소켓 서버 객체(인스턴스) 조회
   // 이를통해 접속한 '모든' 유저에게 브로드캐스팅할 수 있다.
   @WebSocketServer()
-  server: Server;
+  server!: Server;
+
+  // CPU 계산을 위한 이전 상태 저장용 변수
+  private lastCpuUsage = process.cpuUsage();
+  private lastCpuTime = Date.now();
 
   // DI: 모듈에 등록한 커스텀 게이지를 조회
   constructor(
@@ -25,6 +30,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // 서버가 켜질 때, 5초마다 랜덤 위치에 코인을 생성
   afterInit() {
+    console.log('게임 게이트웨이 초기화 완료 - 아이템 생성 및 지표 수집 시작');
+
     setInterval(async() => {
       // 현재 코인 개수를 확인
       const currentCoinCount = await this.redisService.getItemCount();
@@ -44,6 +51,36 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // 생성된 코인 정보를 모든 클라이언트에게 전파
       this.server.emit('itemSpawned', { itemId, position });
     }, 20000);
+
+    // 1초 마다 서버 지표 수집 및 브로드캐스팅
+    setInterval(() => {
+      // 1. OS(컨테이너) 전체 메모리 사용률로 변경
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const memPercent = ((totalMem - freeMem) / totalMem) * 100;
+
+      // 2. CPU 사용량 계산 (단일 코어 기준 ms 단위 연산)
+      const currentCpuUsage = process.cpuUsage(this.lastCpuUsage);
+      const currentTime = Date.now();
+      const timeDelta = currentTime - this.lastCpuTime; // ms 단위 경과 시간
+
+      // (유저시간 + 시스템 시간) / (경과시간 변환) * 100
+      const cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / 1000 / timeDelta) * 100;
+
+      // 다음 계산을 위해 상태 갱신
+      this.lastCpuUsage = process.cpuUsage();
+      this.lastCpuTime = currentTime;
+
+      // 3. 현재 접속 중인 클라이언트(소켓) 수
+      const activeConnections = this.server.engine.clientsCount;
+
+      // 모든 클라이언트에게 'serverMetrics' 이벤트로 쏴줌
+      this.server.emit('serverMetrics', {
+        cpu: Math.min(cpuPercent, 100).toFixed(1), // 소수점 1자리 제한
+        memory: memPercent.toFixed(1),
+        connections: activeConnections
+      });
+    }, 1000); // 1초마다 갱신
   }
 
   // 유저가 게임(소켓)에 접속했을 때 자동으로 실행되는 이벤트

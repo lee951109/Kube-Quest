@@ -2,282 +2,315 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Kube-Quest 코인 획득 테스트</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kube-Quest: The Beginning</title>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
+    /* 🎯 전체적인 게임 분위기 (레트로/RPG) */
+    body { font-family: 'Courier New', Courier, monospace; background: #2c3e50; color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    h1 { margin-bottom: 10px; text-shadow: 2px 2px #c0392b; color: #e74c3c; }
+    p { margin-top: 0; font-size: 14px; color: #ecf0f1; }
+
+    /* 🎯 게임 보드 (잔디밭 패턴) */
+    #game-layout { display: flex; gap: 15px; }
     #game-board { 
       width: 600px; height: 400px; 
-      border: 3px solid #333; 
-      position: relative; 
-      background: #f4f4f4; 
-      cursor: crosshair;
-      overflow: hidden;
+      border: 5px solid #34495e; background-color: #2ecc71; 
+      background-image: linear-gradient(rgba(0,255,0,.05) 2px, transparent 2px), linear-gradient(90s, rgba(0,255,0,.05) 2px, transparent 2px); background-size: 20px 20px; /* 잔디 그리드 효과 */
+      position: relative; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.5);
     }
+
+    /* 🎯 캐릭터 스타일 (점이 아닌 모험가로!) */
     .player { 
-      width: 20px; height: 20px; 
+      width: 30px; height: 30px; 
       position: absolute; 
-      border-radius: 50%; 
       transform: translate(-50%, -50%); 
-      transition: left 0.1s, top 0.1s; 
+      transition: left 0.1s linear, top 0.1s linear; 
+      display: flex; align-items: center; justify-content: center; font-size: 24px; z-index: 10;
     }
-    .me { background: #e74c3c; z-index: 10; border: 2px solid #c0392b; } 
-    .other { background: #3498db; border: 2px solid #2980b9; } 
+    .player.me::after { content: '🧙‍♂️'; } /* 내 캐릭터: 마법사 */
+    .player.other::after { content: '🧑‍🚀'; } /* 다른 유저: 우주비행사(Kube를 여행하는 자) */
     
-    /* 새로 추가된 코인 스타일 */
+    /* 🎯 코인 스타일 (유니코드💰) */
     .coin {
-      width: 15px; height: 15px;
-      position: absolute;
-      background: #f1c40f; /* 금색 */
-      border-radius: 50%;
-      border: 2px solid #f39c12;
+      width: 25px; height: 25px;
+      position: absolute; 
       transform: translate(-50%, -50%);
-      box-shadow: 0 0 5px rgba(241, 196, 15, 0.8);
-      z-index: 5;
+      display: flex; align-items: center; justify-content: center; font-size: 20px; z-index: 5;
+      animation: coin-flicker 1s infinite alternate; /* 코인 반짝임 효과 */
     }
+    .coin::after { content: '💰'; }
+
+    @keyframes coin-flicker {
+      0% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+    }
+
+    /* 🎯 오른쪽 패널 (스코어보드, 채팅) */
+    #side-panel { display: flex; flex-direction: column; gap: 15px; width: 250px; }
 
     /* 스코어보드 UI */
-    #scoreboard {
-      position: absolute;
-      top: 10px; right: 10px;
-      background: rgba(255, 255, 255, 0.9);
-      border: 2px solid #333;
-      padding: 10px;
-      font-size: 14px;
-      z-index: 20;
-      min-width: 150px;
-    }
-    .score-item { margin-bottom: 5px; font-weight: bold; }
-    .my-score { color: #e74c3c; } /* 내 점수는 빨간색으로 강조 */
+    #scoreboard { background: rgba(52, 73, 94, 0.9); border: 3px solid #f1c40f; padding: 10px; }
+    #score-list { margin-top: 10px; font-size: 14px; max-height: 100px; overflow-y: auto; }
+    .score-item { margin-bottom: 5px; font-weight: bold; color: #ecf0f1; border-bottom: 1px solid #7f8c8d; padding-bottom: 3px; }
+    .score-item.my-score { color: #f1c40f; text-shadow: 1px 1px #f39c12; } 
 
     /* 채팅창 UI */
-    #chat-container {
-      width: 600px; margin-top: 10px; border: 2px solid #333; background: #fff;
+    #chat-container { border: 3px solid #34495e; background: rgba(52, 73, 94, 0.9); display: flex; flex-direction: column; height: 230px; }
+    #chat-box { flex: 1; overflow-y: auto; padding: 10px; font-size: 13px; color: #ecf0f1; border-bottom: 1px solid #7f8c8d; }
+    .chat-msg { margin-bottom: 4px; line-height: 1.4; }
+    .chat-my-msg { color: #f1c40f; font-weight: bold; }
+    #chat-input-area { display: flex; padding: 5px; background: #2c3e50; }
+    #chat-input { flex: 1; padding: 6px; border: 1px solid #7f8c8d; background: #34495e; color: white; font-family: 'Courier New', monospace; outline: none; }
+    #chat-send-btn { margin-left: 5px; padding: 6px 10px; cursor: pointer; background: #c0392b; color: white; border: none; font-weight: bold; }
+
+    /* 🎯 1. 관제탑 HUD (Head-Up Display) UI */
+    #hud {
+      background: rgba(52, 73, 94, 0.9); border: 3px solid #3498db; 
+      padding: 10px; color: #00ff00; font-family: monospace; font-size: 13px;
+      border-radius: 5px; box-sizing: border-box; width: 100%;
     }
-    #chat-box {
-      height: 150px; overflow-y: auto; padding: 10px; font-size: 14px; border-bottom: 1px solid #ccc;
+    .hud-title { text-align: center; color: #fff; margin-bottom: 8px; font-weight: bold; border-bottom: 1px solid #555; padding-bottom: 5px; }
+    .hud-row { margin-bottom: 5px; }
+    .bar-bg { background: #333; height: 8px; width: 100%; border-radius: 4px; overflow: hidden; margin-top: 2px; }
+    .bar-fill { height: 100%; transition: width 0.3s; }
+    #cpu-bar { background: #e74c3c; }
+    #mem-bar { background: #f1c40f; }
+
+    /* 🎯 2. 메모리 버그 몬스터 기믹 (중앙) */
+    #bug-monster {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%) scale(1);
+      font-size: 40px; z-index: 2; transition: transform 0.5s ease-out;
+      opacity: 0.8; pointer-events: none; /* 클릭 방해 금지 */
     }
-    .chat-msg { margin-bottom: 5px; }
-    .chat-my-msg { color: #e74c3c; font-weight: bold; }
-    #chat-input-area { display: flex; padding: 5px; background: #f4f4f4; }
-    #chat-input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-    #chat-send-btn { margin-left: 5px; padding: 8px 15px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <h2>🎯 Kube-Quest 코인 파밍 맵</h2>
-  <p>보드를 클릭해 이동하며 생성되는 노란색 코인을 획득해 보세요!</p>
-  <div id="game-board">
-    <div id="scoreboard">
-      <strong>🏆 실시간 순위표</strong>
-      <div id="score-list"></div>
+  <h1>🏰 Kube-Quest</h1>
+  <p>[이동: WASD / 방향키] 코인을 선점하여 Kube의 마법사가 되세요!</p>
+  
+  <div id="game-layout">
+    
+    <div id="game-board">
+      <div id="bug-monster">👾</div>
+    </div> <div id="side-panel">
+      
+      <div id="hud">
+        <div class="hud-title">📡 KUBE 관제탑</div>
+        <div class="hud-row">CPU: <span id="cpu-val">0.0</span>%
+          <div class="bar-bg"><div class="bar-fill" id="cpu-bar" style="width: 0%;"></div></div>
+        </div>
+        <div class="hud-row">MEM: <span id="mem-val">0.0</span>%
+          <div class="bar-bg"><div class="bar-fill" id="mem-bar" style="width: 0%;"></div></div>
+        </div>
+        <div class="hud-row" style="margin-top: 10px; color: #fff; text-align: center;">
+          유저 연결: <span id="conn-val" style="color: #3498db; font-weight: bold; font-size: 16px;">0</span>명
+        </div>
+      </div>
+
+      <div id="scoreboard">
+        <strong>🏆 모험가 순위표</strong>
+        <div id="score-list"></div>
+      </div>
+
+      <div id="chat-container">
+        <div id="chat-box"></div>
+        <div id="chat-input-area">
+          <input type="text" id="chat-input" placeholder="Enter 메시지" autocomplete="off">
+          <button id="chat-send-btn">전송</button>
+        </div>
+      </div>
     </div>
   </div>
-
-  <div id="chat-container">
-    <div id="chat-box"></div>
-    <div id="chat-input-area">
-      <input type="text" id="chat-input" placeholder="메시지를 입력하고 Enter를 누르세요" autocomplete="off">
-      <button id="chat-send-btn">전송</button>
-    </div>
-  </div>
-
 
   <script>
-    // 1. 소켓 서버 연결
     const socket = io('http://localhost:3000');
     const board = document.getElementById('game-board');
-
-    const players = {}; // 화면에 그려진 다른 유저들 저장소
-    const items = {}; // 화면에 있는 코인 데이터 저장
-
-    const scores = {}; // 유저별 점수 저장소
+    
+    // --- 게임 상태 변수 ---
+    const players = {}; 
+    const items = {}; 
+    const scores = {}; 
+    const chatBox = document.getElementById('chat-box');
+    const chatInput = document.getElementById('chat-input');
+    const chatSendBtn = document.getElementById('chat-send-btn');
     const scoreListEl = document.getElementById('score-list');
 
-    // 내 캐릭터 DOM 생성
+    // 🎯 [핵심 1] 내 캐릭터 조작 정보
+    let myPos = { x: 100, y: 100 }; // 초기 위치
+    const moveSpeed = 10; // 이동 속도 (px)
+    const boardWidth = 600;
+    const boardHeight = 400;
+
+    // 내 아바타 생성
     const myAvatar = document.createElement('div');
     myAvatar.className = 'player me';
+    updateAvatarPosition(myAvatar, myPos);
     board.appendChild(myAvatar);
 
-     // 내가 처음 접속했을 때: Redis가 기억하는 기존 유저들 좌표 로드
+    // --- 🎯 [핵심 2] 키보드 조작(WASD) 이벤트 리스너 추가 ---
+    document.addEventListener('keydown', (e) => {
+      // 채팅창에 입력 중일 때는 조작 방지
+      if (document.activeElement === chatInput) return;
+
+      const key = e.key.toLowerCase();
+      let moved = false;
+
+      // 맵 경계 체크를 포함한 이동 로직
+      if (key === 'w' || key === 'arrowup') {
+        myPos.y = Math.max(15, myPos.y - moveSpeed); moved = true;
+      } else if (key === 's' || key === 'arrowdown') {
+        myPos.y = Math.min(boardHeight - 15, myPos.y + moveSpeed); moved = true;
+      } else if (key === 'a' || key === 'arrowleft') {
+        myPos.x = Math.max(15, myPos.x - moveSpeed); moved = true;
+      } else if (key === 'd' || key === 'arrowright') {
+        myPos.x = Math.min(boardWidth - 15, myPos.x + moveSpeed); moved = true;
+      }
+
+      if (moved) {
+        updateAvatarPosition(myAvatar, myPos);
+        socket.emit('move', myPos); // 서버로 새로운 좌표 전송
+        checkItemCollision(myPos.x, myPos.y); // 이동할 때마다 코인 충돌 검사
+      }
+    });
+
+    // --- 소켓 이벤트 리스너들 (기존 로직 유지) ---
     socket.on('initPositions', (positions) => {
-      for (const [id, pos] of Object.entries(positions)){
+      for (const [id, pos] of Object.entries(positions)) {
         if (id !== socket.id) updateOtherPlayer(id, pos);
       }
     });
 
-    // 누군가 움직였을 때 (Redis에 업데이트 됨과 동시에 브로드캐스팅 됨)
     socket.on('playerMoved', (data) => {
       if (data.clientId !== socket.id) updateOtherPlayer(data.clientId, data.position);
     });
 
-    // 누군가 나갔을 때 (Redis에서 삭제됨)
     socket.on('playerDisconnected', (id) => {
-      if (players[id]) {
-        players[id].remove();
-        delete players[id];
-      }
+      if (players[id]) { players[id].remove(); delete players[id]; }
+      if (scores[id]) { delete scores[id]; renderScoreboard(); }
     });
 
-    // 1. 처음 접속 시 이미  깔려있는 코인들 그리기
-    socket.on('initItems', (serverItems) => {
-      for (const [id, pos] of Object.entries(serverItems)){
-        drawItem(id, pos);
-      }
-    });
-
-    // 2. 서버에서 새로운 코인이 생성되었을때 그리기 (5초마다)
-    socket.on('itemSpawned', (data) => {
-      drawItem(data.itemId, data.position);
-    });
-
-    // 3. 누군가 코인을 성공적으로 획득했을 때 화면에서 지우기
+    // 아이템 로직
+    socket.on('initItems', (serverItems) => { for (const [id, pos] of Object.entries(serverItems)) { drawItem(id, pos); } });
+    socket.on('itemSpawned', (data) => { drawItem(data.itemId, data.position); });
     socket.on('itemCollected', (data) => {
       if (items[data.itemId]) {
-        items[data.itemId].element.remove(); // DOM에서 삭제
-        delete items[data.itemId]; // 메모리에서 삭제
-
-        // 내가 먹었다면
-        if (data.clientId === socket.id) {
-          console.log(`코인 획득 성공! ID: ${data.itemId}`);
-        }
+        items[data.itemId].element.remove();
+        delete items[data.itemId];
+        if (data.clientId === socket.id) console.log(`코인 획득 성공! ID: ${data.itemId}`);
       }
     });
 
-    // 처음 접속 시 모든 유저의 점수 세팅
-    socket.on('initScores', (serverScores) => {
-      Object.assign(scores, serverScores);
-      renderScoreboard();
-    });
+    // 점수 및 채팅 로직
+    socket.on('initScores', (serverScores) => { Object.assign(scores, serverScores); renderScoreboard(); });
+    socket.on('scoreUpdated', (data) => { scores[data.clientId] = data.score; renderScoreboard(); });
+    socket.on('initChat', (chats) => { chats.forEach(chat => appendChatMessage(chat)); });
+    socket.on('chatMessage', (data) => { appendChatMessage(data); });
 
-    // 누군가 점수를 획득했을 때 화면 갱신
-    socket.on('scoreUpdated', (data) => {
-      scores[data.clientId] = data.score;
-      renderScoreboard();
-    });
+    // --- 유틸리티 함수들 ---
 
-    // 화면 클릭 시 내 좌표를 서버로 전송
-    board.addEventListener('click', (e) => {
-      const rect = board.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+    // 아바타 위치 CSS 업데이트
+    function updateAvatarPosition(el, pos) {
+      el.style.left = pos.x + 'px';
+      el.style.top = pos.y + 'px';
+    }
 
-      // 내 화면의 빨간 점 이동
-      myAvatar.style.left = x + 'px';
-      myAvatar.style.top = y + 'px';
-
-      // 서버로 좌표 발송 -> 서버가 Redis에 HSET으로 덮어씀
-      socket.emit('move', { x, y });
-
-      // 내 캐릭터가 이동한 후, 근처에 코인이 있는지 체크
-      checkItemCollision(x, y);
-    });
-
-    // 다른 유저(파란 점)를 화면에 그리거나 위치를 갱신하는 함수
+    // 다른 플레이어 업데이트 (모험가 이모지 🧑‍🚀)
     function updateOtherPlayer(id, pos) {
       if (!players[id]) {
         players[id] = document.createElement('div');
         players[id].className = 'player other';
         board.appendChild(players[id]);
       }
-      players[id].style.left = pos.x + 'px';
-      players[id].style.top = pos.y + 'px';
+      updateAvatarPosition(players[id], pos);
     }
 
-    // 화면에 코인 그리기
+    // 코인 그리기 (💰)
     function drawItem(id, pos) {
-      if (items[id]) return; // 이미 있다면 패스
-
+      if (items[id]) return;
       const coinEl = document.createElement('div');
       coinEl.className = 'coin';
       coinEl.style.left = pos.x + 'px';
       coinEl.style.top = pos.y + 'px';
       board.appendChild(coinEl);
-
-      // 나중에 위치 비교를 위해 x, y 좌표도 함께 저장
       items[id] = { element: coinEl, x: pos.x, y: pos.y };
     }
 
-    // 내 캐릭터 좌표와 코인들 좌표 비교하여 거리 체크
+    // 충돌 감지 (조금 더 넉넉하게 35px 적용)
     function checkItemCollision(px, py) {
-      for (const[id, coin] of Object.entries(items)) {
-        // 피타고라스 정리로 두 점 사이의 거리 계산
+      for (const [id, coin] of Object.entries(items)) {
         const dx = px - coin.x;
         const dy = py - coin.y;
-        const distance = Math.sqrt(dx * dx + dy *dy);
-
-        // 거리가 20px 이내로 가까워지면 획득한 것으로 간주
-        if (distance < 20) {
-          // 서버에 획득 요청을 보냄 (아직 화면에서 제거 x)
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < 35) {
+          console.log(`[프론트] 코인 충돌! 획득 시도: ${id}`);
           socket.emit('collectItem', { itemId: id });
         }
       }
     }
 
+    // 스코어보드 렌더링 (레트로 스타일)
     function renderScoreboard() {
       scoreListEl.innerHTML = '';
-
-      // 점수를 기준으로 내림차순 정렬
       const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-
       for (const [id, score] of sortedScores) {
         const div = document.createElement('div');
         div.className = 'score-item';
-
-        // 내 ID면 빨간색 클래스 부여, 아니면 앞의 4자리만 보여주기
-        if(id === socket.id) {
-          div.classList.add('my-score');
-          div.innerHTML = `내 (Me): ${score}점`;
-        } else {
-          div.innerText = `User_${id.substring(0, 4)}: ${score}점`;
-        }
-
+        if (id === socket.id) { div.classList.add('my-score'); div.innerText = `나(🧙‍♂️): ${score}점`; } 
+        else { div.innerText = `Lvl_${score}🧑‍🚀_${id.substring(0, 4)}: ${score}점`; }
         scoreListEl.appendChild(div);
       }
     }
 
-    // 채팅 관련 
-    const chatBox = document.getElementById('chat-box');
-    const chatInput = document.getElementById('chat-input');
-    const chatSendBtn = document.getElementById('chat-send-btn');
-
-    // 채팅 메시지를 화면에 그리는 함수
+    // 채팅 렌더링
     function appendChatMessage(data) {
       const div = document.createElement('div');
       div.className = 'chat-msg';
-
-      const userId = data.clientId === socket.id ? '나 (ME)' : `User_${data.clientId.substring(0, 4)}`;
+      const userId = data.clientId === socket.id ? '나(Me)' : `User_${data.clientId.substring(0, 4)}`;
       if (data.clientId === socket.id) div.classList.add('chat-my-msg');
-
       div.innerText = `[${userId}]: ${data.message}`;
       chatBox.appendChild(div);
-
-      // 스크롤은 항상 맨 아래로
-      chatBox.scrollTop = chatBox.scrollHeight;
+      chatBox.scrollTop = chatBox.scrollHeight; // 스크롤 하단 고정
     }
 
-    // 1. 처음 접속 시 과거 채팅 내역 조회
-    socket.on('initChat', (chats) => {
-      chats.forEach(chat => appendChatMessage(chat));
-    });
-
-    // 2. 누군가 새로운 채팅을 보냈을 때
-    socket.on('chatMessage', (data) => {
-      appendChatMessage(data);
-    });
-
-    // 3. 메시지 서버로 전송하기 (버튼 클릭 또는 Enter 키)
+    // 채팅 전송
     function sendMessage() {
       const msg = chatInput.value;
-      if (msg.trim() !== '') {
-        socket.emit('sendMessage', { message: msg });
-        chatInput.value = ''; // 입력창 초기화
-      }
+      if (msg.trim() !== '') { socket.emit('sendMessage', { message: msg }); chatInput.value = ''; }
     }
-
     chatSendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') sendMessage();
+    chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+    // 관측 가능성(Observability) 연동 로직
+    const cpuValEl = document.getElementById('cpu-val');
+    const cpuBarEl = document.getElementById('cpu-bar');
+    const memValEl = document.getElementById('mem-val');
+    const memBarEl = document.getElementById('mem-bar');
+    const connValEl = document.getElementById('conn-val');
+    const bugMonsterEl = document.getElementById('bug-monster');
+
+    socket.on('serverMetrics', (data) => {
+      // 1. HUD 텍스트 및 게이지 바 업데이트
+      cpuValEl.innerText = data.cpu;
+      cpuBarEl.style.width = data.cpu + '%';
+      memValEl.innerText = data.memory;
+      memBarEl.style.width = data.memory + '%';
+      connValEl.innerText = data.connections;
+
+      // 2. [기믹 1] CPU 사용량에 따라 보드 테두리가 붉게 경고등 점멸 (수치를 증폭시켜 효과 극대화)
+      const cpuVisualLoad = Math.min(parseFloat(data.cpu) * 10, 100); 
+      if (cpuVisualLoad > 20) {
+        board.style.boxShadow = `inset 0 0 ${cpuVisualLoad}px rgba(255, 0, 0, 0.8), 0 10px 20px rgba(0,0,0,0.5)`;
+      } else {
+        board.style.boxShadow = `0 10px 20px rgba(0,0,0,0.5)`; // 정상 상태
+      }
+
+      // 3. [기믹 2] 메모리(Heap) 사용률에 비례하여 중앙의 버그 몬스터(👾)가 거대해짐
+      // 기본 scale 1 + (메모리% / 일정비율)
+      const memFloat = parseFloat(data.memory);
+      const bugScale = 1 + (memFloat / 15); // 메모리가 45%면 약 4배 거대해짐
+      bugMonsterEl.style.transform = `translate(-50%, -50%) scale(${bugScale})`;
     });
 
   </script>
